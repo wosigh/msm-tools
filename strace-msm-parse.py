@@ -171,31 +171,20 @@ class FHLogger(FHBase):
     packet = None
     if self.packets_w:
       packet = self.packets_r.feed( data )
-    #print "RAW: dir=r fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
+    #print "RAW: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
     #hexdump(data)
     if packet:
-      print "PACKET: dir=w fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
+      print "PACKET: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
       hexdump(packet)
   def write(self, data):
     packet = None
     if self.packets_w:
       packet = self.packets_w.feed( data )
-    #print "RAW: dir=w fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
+    #print "RAW: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
     #hexdump(data)
     if packet:
-      print "PACKET: dir=w fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
+      print "PACKET: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
       hexdump(packet)
-  def dump(self):
-    datas = []
-    for x in self.log:
-      dir, data = x
-      datas.append(data)
-      print "dir=%s fd=%i fn='%s' len=%i/0x%x" % (dir, self.id, self.filename, len(data), len(data))
-      hexdump(data)
-    datas.sort()
-    for data in datas:
-      print "fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
-      hexdump(data)
 
 FH = FHLogger
 
@@ -248,18 +237,25 @@ class Packetizer(object):
   def feed(self, data):
     crcResult=0xf0b8
     self.input += data
+    start = self.input.find('\xfa')
+    if start < 0:
+      return
+    elif start > 0:
+      print "DISCARDING DATA:"
+      hexdump(self.input[:start])
+      self.input = self.input[start:]
     end = self.input.find('\x7e')
-    if end >= 0:
-      packet = self.input[:end+1]
-      if crcResult == crc16fcs(packet[:-1]):
-        print "CRC OK"
-      else:
-        print "CRC bad"
-      packet = packet.replace('\x7d\x5d', '\x7d')
-      packet = packet.replace('\x7d\x5e', '\x7e')
-      self.input = self.input[end+1:]
-      self.output.append(packet)
-      return packet
+    if end < 0:
+      return
+    packet = self.input[:end+1]
+    packet = packet.replace('\x7d\x5d', '\x7d')
+    packet = packet.replace('\x7d\x5e', '\x7e')
+    self.input = self.input[end+1:]
+    if crcResult != crc16fcs(packet[:-1]):
+      print "CRC ERROR"
+      return
+    self.output.append(packet)
+    return packet[1:-3]
 
 for line in file(sys.argv[1]):
   line = line.rstrip('\n')
@@ -269,10 +265,4 @@ for line in file(sys.argv[1]):
   pid, rest = line.split(None, 1)
   pid = PIDs.setdefault(int(pid), PID())
   pid.handle(rest)
-
-#for pid in PIDs.values():
-#  for fh in pid.FHs_closed:
-#    fh.dump()
-#  for fh in pid.FHs.values():
-#    fh.dump()
 
