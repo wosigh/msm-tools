@@ -56,6 +56,7 @@ class PID(object):
     self.funcs = {
       'open': self._open,
       'write': self._write,
+      'writev': self._writev,
       'read': self._read,
       'close': self._close,
       'clone': self._clone,
@@ -132,6 +133,19 @@ class PID(object):
     fh = self.FHs.setdefault(fh, FH(id=fh))
     debug( "WRITE:", fh, repr(data), length )
     fh.write(data)
+  def _writev(self, params, result):
+    mo = re.match(r"([0-9]+), \[({[^\]]*})\], ([0-9]+)", params)
+    debug( mo.groups() )
+    fh, dataarray, length = mo.groups()
+    fh = int(fh)
+    data = ""
+    for mo in re.finditer(r"{\"([^}]*)\", ([0-9]+)[^{]*}", dataarray):
+      data += mo.group(1)
+    data = eval("str('%s')" % data)
+    length = int(length)
+    fh = self.FHs.setdefault(fh, FH(id=fh))
+    debug( "WRITEV:", fh, repr(data), length )
+    fh.write(data)
   def _read(self, params, result):
     if int(result) < 0:
       debug( "READ: ERROR" )
@@ -171,8 +185,9 @@ class FHLogger(FHBase):
     packet = None
     if self.packets_w:
       packet = self.packets_r.feed( data )
-    #print "RAW: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
-    #hexdump(data)
+    else:
+      print "RAW: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
+      hexdump(data)
     if packet:
       print "PACKET: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
       hexdump(packet)
@@ -180,8 +195,9 @@ class FHLogger(FHBase):
     packet = None
     if self.packets_w:
       packet = self.packets_w.feed( data )
-    #print "RAW: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
-    #hexdump(data)
+    else:
+      print "RAW: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
+      hexdump(data)
     if packet:
       print "PACKET: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
       hexdump(packet)
