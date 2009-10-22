@@ -31,11 +31,6 @@ known_sequences = {
     # 'Acknowledge??': (0xfa, 0x50, 0x0c),
 }
 
-filter = {
-    'filename': [], #['/dev/modemuart'],
-    'fd': [], # [9],
-}
-
 p = patterns['stefan']
 
 def debug_on(*text):
@@ -128,10 +123,6 @@ class PID(object):
     filename, flags = mo.groups()
     filename = eval("str('%s')" % filename)
 
-    # Filter for filenames
-    if not filename in filter['filename']:
-        return
-
     assert not int(result) in self.FHs
     self.FHs[int(result)] = FH(id=int(result), filename=filename)
     debug( "OPEN:", repr(filename), flags, result )
@@ -150,10 +141,6 @@ class PID(object):
     fh, data, length = mo.groups()
     fh = int(fh)
 
-    # filter for fd
-    if not fh in filter['fd']:
-        return
-
     data = eval("str('%s')" % data)
     length = int(length)
     fh = self.FHs.setdefault(fh, FH(id=fh))
@@ -164,10 +151,6 @@ class PID(object):
     debug( mo.groups() )
     fh, dataarray, length = mo.groups()
     fh = int(fh)
-
-    # filter for fd
-    if not fh in filter['fd']:
-        return
 
     data = ""
     for mo in re.finditer(r"{\"([^}]*)\", ([0-9]+)[^{]*}", dataarray):
@@ -185,10 +168,6 @@ class PID(object):
     debug( mo.groups() )
     fh, data, length = mo.groups()
     fh = int(fh)
-
-    # filter for fd
-    if not fh in filter['fd']:
-        return
 
     data = eval("str('%s')" % data)
     length = int(length)
@@ -228,7 +207,6 @@ class FHLogger(FHBase):
     if packet:
       print "PACKET: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
       self.identify(packet)
-      print "\n"
   def write(self, data):
     packet = None
     if self.packets_w:
@@ -241,7 +219,6 @@ class FHLogger(FHBase):
       print "PACKET: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
       self.identify(packet)
       #hexdump(packet)
-      print "\n"
 
   def identify(self, packet):
       name = ""
