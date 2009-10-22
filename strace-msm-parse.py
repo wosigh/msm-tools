@@ -20,6 +20,22 @@ patterns = {
     },
   }
 
+known_sequences = {
+    'Synchronisation': (0xfa, 0x10, 0x0),
+    'Synchronisation Response': (0xfa, 0x20, 0x0),
+    'Empty Configuration': (0xfa, 0x30, 0x0),
+    'Configuration': (0xfa, 0x30, 0x00, 0x1),
+    'Configuration Response': (0xfa, 0x40, 0x00, 0x1),
+    'Empty Configuration Response': (0xfa, 0x40, 0x0),
+    'Acknowledge': (0xfa, 0x50, 0x0),
+    # 'Acknowledge??': (0xfa, 0x50, 0x0c),
+}
+
+filter = {
+    'filename': [], #['/dev/modemuart'],
+    'fd': [], # [9],
+}
+
 p = patterns['stefan']
 
 def debug_on(*text):
@@ -111,6 +127,11 @@ class PID(object):
     debug( mo.groups() )
     filename, flags = mo.groups()
     filename = eval("str('%s')" % filename)
+
+    # Filter for filenames
+    if not filename in filter['filename']:
+        return
+
     assert not int(result) in self.FHs
     self.FHs[int(result)] = FH(id=int(result), filename=filename)
     debug( "OPEN:", repr(filename), flags, result )
@@ -128,6 +149,11 @@ class PID(object):
     debug( mo.groups() )
     fh, data, length = mo.groups()
     fh = int(fh)
+
+    # filter for fd
+    if not fh in filter['fd']:
+        return
+
     data = eval("str('%s')" % data)
     length = int(length)
     fh = self.FHs.setdefault(fh, FH(id=fh))
@@ -138,6 +164,11 @@ class PID(object):
     debug( mo.groups() )
     fh, dataarray, length = mo.groups()
     fh = int(fh)
+
+    # filter for fd
+    if not fh in filter['fd']:
+        return
+
     data = ""
     for mo in re.finditer(r"{\"([^}]*)\", ([0-9]+)[^{]*}", dataarray):
       data += mo.group(1)
@@ -154,6 +185,11 @@ class PID(object):
     debug( mo.groups() )
     fh, data, length = mo.groups()
     fh = int(fh)
+
+    # filter for fd
+    if not fh in filter['fd']:
+        return
+
     data = eval("str('%s')" % data)
     length = int(length)
     fh = self.FHs.setdefault(fh, FH(id=fh))
@@ -188,9 +224,11 @@ class FHLogger(FHBase):
     else:
       print "RAW: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
       hexdump(data)
+      print "\n"
     if packet:
       print "PACKET: dir=read fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
-      hexdump(packet)
+      self.identify(packet)
+      print "\n"
   def write(self, data):
     packet = None
     if self.packets_w:
@@ -198,9 +236,40 @@ class FHLogger(FHBase):
     else:
       print "RAW: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(data), len(data))
       hexdump(data)
+      print "\n"
     if packet:
       print "PACKET: dir=write fd=%i fn='%s' len=%i/0x%x" % (self.id, self.filename, len(packet), len(packet))
+      self.identify(packet)
+      #hexdump(packet)
+      print "\n"
+
+  def identify(self, packet):
+      name = ""
+      pm = map( lambda c: "%02x" % ord(c), packet)
+      for seq in known_sequences:
+          n = 0
+          name = seq
+          for c in known_sequences[seq]:
+            #print "%s = %s" % (pm[n], "%02x" %c)
+            if not pm[n] == "%02x" % c:
+              name = ""
+              break
+            n += 1
+          if n == len(known_sequences[seq]):
+            if n < len(pm):
+              print "Packet seems to be a %s message, but with payload: " % name
+              tmp = ""
+              while n < len(pm):
+                tmp += "%s " % pm[n]
+                n += 1
+              print tmp
+            else:
+                print "message type: %s" % name
+            break
+      print "full packet:"
       hexdump(packet)
+
+
 
 FH = FHLogger
 
@@ -271,7 +340,7 @@ class Packetizer(object):
       print "CRC ERROR"
       return
     self.output.append(packet)
-    return packet[1:-3]
+    return packet[0:-3]
 
 for line in file(sys.argv[1]):
   line = line.rstrip('\n')
